@@ -8,7 +8,7 @@
 
 __author__ = 'Alexander Kuzmin'
 
-def simple_multiplies(number):
+def simpleMultiplies(number):
     temp = number
     answer = {}
     for i in range(2, int(number**0.5)):
@@ -27,5 +27,5 @@ def simple_multiplies(number):
 
 
 if __name__ == '__main__':
-    output = simple_multiplies(int(input()))
+    output = simpleMultiplies(int(input()))
     print (output)
