@@ -8,30 +8,17 @@
 import argparse
 import enum
 import random
-from collections import Counter
-from collections import defaultdict
+import sys
+from collections import Counter, defaultdict
 from copy import copy
 from itertools import chain
+from operator import itemgetter
 
 __author__ = 'Alexander Kuzmin'
 
-'''
-    Questions:
-        1. open file or read from input()? - input 
-        2. How to tokenize "z1?af2back, toto"? OK
-        3. All tokens (Punctuation, not spaces) in probabilities?
-            3.1 Ignore 2-grams "..., ...", "..., man..." or "...! I..."? only words
-        4. How to process 'What's that...?'?  OK
-        5. Слова, для которых вероятность равна 0, выводить не нужно. OK
-        6. Обратите внимание, что первым всегда идет блок,
-            соответствующий глубине 0 и он обозначается пустой строке - \n + '  :'...
-        7. Какая сложность генерации допустима? any
-        8. Any balanced tries? no
-'''
-
 def BinSearch(arr, predicate):
     '''
-    Bin search by predicate.
+    Binary search by predicate.
 
     :param arr: list - where to search
     :param predicate: function - we looking for the element that satisfies the predicate
@@ -112,12 +99,13 @@ def Tokenize(text):
     tokens.append("".join(current_token))
     return tokens[1:]
 
-def GetNGrams(tokens, n):
+def GetNGrams(tokens, n, predicate):
     '''
     get words n_grams from the list of different tokens
 
     :param tokens: list fo str - the list of tokens
     :param n: int - the amount of words in one n-gram
+    :param predicate: object - determines the correct predicates: predicate(token) should be true
 
     :return: collections.defaultdict of collections.Counter - dict of n-grams
     '''
@@ -126,14 +114,14 @@ def GetNGrams(tokens, n):
     n_gram = []
     index = 0
     while (len(n_gram) != n + 1 and index < len(tokens)):
-        if tokens[index].isalpha():
+        if predicate(tokens[index]):
             n_gram.append(tokens[index])
         index += 1
 
     n_grams[tuple(n_gram[:-1])][n_gram[-1]] += 1
 
     while (index < len(tokens)):
-        if tokens[index].isalpha():
+        if predicate(tokens[index]):
             n_gram.pop(0)
             n_gram.append(tokens[index])
             n_grams[tuple(n_gram[:-1])][n_gram[-1]] += 1
@@ -154,14 +142,14 @@ def GetProbabilities(text, depth):
     list_of_probabilities_counters = []
     tokens = Tokenize(text)
     for current_depth in range(depth + 1):
-        tokens_counter = GetNGrams(tokens, current_depth)
+        tokens_counter = GetNGrams(tokens, current_depth, lambda x : x.isalpha())
         total_count = {k : sum(v.values()) for k, v in tokens_counter.items()}
         list_of_probabilities_counters.append(
             {prefix : {k : v / total_count[prefix] for k, v in counter.items()}
                 for prefix, counter in tokens_counter.items()})
     return list_of_probabilities_counters
 
-def Generate(text, depth, size, seed=123):
+def Generate(text, depth, size, seed=None):
     '''
     generate new text according with probabilities of depth-grams from the text
 
@@ -173,21 +161,57 @@ def Generate(text, depth, size, seed=123):
     :return: generated text
     '''
 
-    n_gram_probabilities = GetNGrams(Tokenize(text), depth)
-    total_arrays = {key : list(chain([[k] * v for k, v in counter.items()]))
+    n_gram_probabilities = GetNGrams(Tokenize(text),
+                                     depth,
+                                     lambda x : not x.isspace() and not x.isdigit())
+    total_arrays = {key : list(chain(*[[k] * v for k, v in counter.items()]))
                     for key, counter in n_gram_probabilities.items()}
-    print(total_arrays)
-    prefix_tokens = list(random.choice(list(n_gram_probabilities.keys())))
-    print(prefix_tokens)
-    generated_text = copy(prefix_tokens)
+    prefices = list([word for word in n_gram_probabilities.keys()
+                        if len(word) == 0 or word[0][0].isupper()])
+    generated_text = []
+    prefix_tokens = []
+    if (prefices != []):
+        prefix_tokens = list(random.choice(prefices))
+        generated_text = copy(prefix_tokens)
     random.seed(seed)
-    while(len(generated_text) < size):
-        value = random.choice(total_arrays[tuple(prefix_tokens)])
-        generated_text.append(value)
-        prefix_tokens.append(value)
-        prefix_tokens.pop(0)
-    # print(generated_text)
+    current_size = sum([len(word) for word in generated_text])
+    while(current_size < size):
+        current_array = total_arrays.get(tuple(prefix_tokens))
+        if (current_array != None):
+            word = random.choice(current_array)
+            generated_text.append(word)
+            current_size += len(word) + 1
+            prefix_tokens.append(word)
+            prefix_tokens.pop(0)
+        else:
+            prefix_tokens = list(random.choice(list(n_gram_probabilities.keys())))
+            generated_text.extend(prefix_tokens)
+            current_size += sum([len(word) for word in prefix_tokens]) + 1
     return " ".join(generated_text)
+
+def Print(text, args):
+    '''
+    print the text in format according with args
+
+    :param text: str - the text to be printed.
+    :param args: argparse.ArgumentParser() - the command to be processed and the arguments for it.
+
+    :return: void
+    '''
+
+    if (args.command == 'tokenize'):
+        for word in text:
+            print(word)
+    elif (args.command == 'generate'):
+        print(text)
+    elif (args.command == 'probabilities'):
+        for depth_dict in text:
+            sorted_keys = sorted(depth_dict.keys())
+            for prefix in sorted_keys:
+                print(" ".join(prefix))
+                sorted_dict = sorted(depth_dict[prefix].items(), key=itemgetter(0))
+                for word, count in sorted_dict:
+                    print("  {0}: {1:.2}".format(word, count))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -195,12 +219,10 @@ if __name__ == '__main__':
                           "generating and testing.")
     parser.add_argument("command", type=str,
                         help="command to process")
-    parser.add_argument("-d", "--depth", action="store", type=int, default=0,
+    parser.add_argument("-d", "--depth", action="store", type=int, default=1,
                         help="The maximum depth of chains.")
     parser.add_argument("-s", "--size", action="store", type=int, default=32,
                         help="Approximate amount of words for generating.")
     args = parser.parse_args()
-    text = input()
-    while text:
-        print(ToProcessText(text, args))
-        text = input()
+    for text in sys.stdin:
+        Print(ToProcessText(text, args), args)
