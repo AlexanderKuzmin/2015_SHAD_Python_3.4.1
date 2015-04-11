@@ -7,8 +7,11 @@
 
 import argparse
 import enum
+import random
 from collections import Counter
 from collections import defaultdict
+from copy import copy
+from itertools import chain
 
 __author__ = 'Alexander Kuzmin'
 
@@ -158,12 +161,33 @@ def GetProbabilities(text, depth):
                 for prefix, counter in tokens_counter.items()})
     return list_of_probabilities_counters
 
-def Generate(text, depth, size):
-    n_gram_probabilities = GetProbabilities(text, depth)[-1]
-    generated_text = [n_gram_probabilities.most_common()]
+def Generate(text, depth, size, seed=123):
+    '''
+    generate new text according with probabilities of depth-grams from the text
+
+    :param text: str - text, from which we get distribution of d-grams
+    :param depth: int - the depth (length) of d-grams
+    :param size: int - the length of the text
+    :param seed: int - random seed for random.seed()
+
+    :return: generated text
+    '''
+
+    n_gram_probabilities = GetNGrams(text, depth)
+    total_arrays = {key : list(chain([[k] * v for k, v in counter.items()]))
+                    for key, counter in n_gram_probabilities.items()}
+    print(total_arrays)
+    prefix_tokens = list(random.choice(list(n_gram_probabilities.keys())))
+    print(prefix_tokens)
+    generated_text = copy(prefix_tokens)
+    random.seed(seed)
     while(len(generated_text) < size):
-        generated_text.append(n_gram_probabilities)
-    return generated_text
+        value = random.choice(total_arrays[tuple(prefix_tokens)])
+        generated_text.append(value)
+        prefix_tokens.append(value)
+        prefix_tokens.pop(0)
+    # print(generated_text)
+    return " ".join(generated_text)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -173,7 +197,7 @@ if __name__ == '__main__':
                         help="command to process")
     parser.add_argument("-d", "--depth", action="store", type=int, default=0,
                         help="The maximum depth of chains.")
-    parser.add_argument("-s", "--size", action="store", type=int,
+    parser.add_argument("-s", "--size", action="store", type=int, default=32,
                         help="Approximate amount of words for generating.")
     args = parser.parse_args()
     text = input()
