@@ -173,7 +173,7 @@ def Generate(text, depth, size, seed=123):
     :return: generated text
     '''
 
-    n_gram_probabilities = GetNGrams(text, depth)
+    n_gram_probabilities = GetNGrams(Tokenize(text), depth)
     total_arrays = {key : list(chain([[k] * v for k, v in counter.items()]))
                     for key, counter in n_gram_probabilities.items()}
     print(total_arrays)
