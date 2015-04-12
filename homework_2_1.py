@@ -5,8 +5,9 @@
     @note: Tools for processing a text: tokenizing, writing probabilities, generating and testing.
 '''
 
+#import enum  # there are no such module in the contest
 import argparse
-#import enum  # there are no the module in the contest
+import unittest
 import random
 import sys
 from collections import Counter, defaultdict
@@ -55,8 +56,7 @@ def ToProcessText(input_text, args):
     elif (args.command == 'generate'):
         return Generate(input_text, args.depth, args.size)
     elif (args.command == 'test'):
-        return UnitTests(input_text, args)
-
+        return UnitTests()
 
 # there are no module enum.Enum() in the contest
 class State:
@@ -167,11 +167,11 @@ def GetProbabilities(input_text, depth):
                 for prefix, counter in tokens_counter.items()})
     return list_of_probabilities_counters
 
-def Generate(text, depth, size, seed=None):
+def Generate(input_text, depth, size, seed=None):
     '''
     generate new text according with probabilities of depth-grams from the text
 
-    :param text: str - text, from which we get distribution of d-grams
+    :param text: list of str - text, from which we get distribution of d-grams
     :param depth: int - the depth (length) of d-grams
     :param size: int - the length of the text
     :param seed: int - random seed for random.seed()
@@ -179,19 +179,22 @@ def Generate(text, depth, size, seed=None):
     :return: generated text
     '''
 
-    n_gram_probabilities = GetNGrams(Tokenize(text),
-                                     depth,
-                                     lambda x: not x.isspace() and not x.isdigit())
+    random.seed(seed)
+    n_gram_probabilities = defaultdict(Counter)
+    for line in input_text:
+        n_gram_probabilities = GetNGrams(Tokenize(line),
+                                         depth,
+                                         lambda x: not x.isspace() and not x.isdigit(),
+                                         n_gram_probabilities)
     total_arrays = {key: list(chain(*[[k] * v for k, v in counter.items()]))
                     for key, counter in n_gram_probabilities.items()}
-    prefices = list([word for word in n_gram_probabilities.keys()
-                     if len(word) == 0 or word[0][0].isupper()])
+    prefices = [word for word in n_gram_probabilities.keys()
+                if len(word) == 0 or word[0][0].isupper()]
     generated_text = []
     prefix_tokens = []
     if (prefices != []):
         prefix_tokens = list(random.choice(prefices))
         generated_text = copy(prefix_tokens)
-    random.seed(seed)
     current_size = sum([len(word) for word in generated_text])
     while(current_size < size):
         current_array = total_arrays.get(tuple(prefix_tokens))
@@ -207,13 +210,175 @@ def Generate(text, depth, size, seed=None):
             current_size += sum([len(word) for word in prefix_tokens]) + 1
     return " ".join(generated_text)
 
+class TestProgram(unittest.TestCase):
+    '''
+    Unit tests for the program
+    '''
+
+    def test_Tokenize_01(self):
+        self.assertListEqual(Tokenize("Hello, world!"),
+                             ["Hello", ",", " ", "world", "!"],
+                             "Tokenize test failed.")
+
+    def test_Tokenize_02(self):
+        self.assertListEqual(Tokenize("Abracadabra"), ["Abracadabra"], "Tokenize test failed.")
+
+    def test_Tokenize_03(self):
+        self.assertListEqual(Tokenize("18572305232"), ["18572305232"], "Tokenize test failed.")
+
+    def test_Tokenize_04(self):
+        self.assertListEqual(Tokenize(",!...%^&*@()!@"),
+                             [",!...%^&*@()!@"],
+                             "Tokenize test failed.")
+
+    def test_Tokenize_04(self):
+        self.assertListEqual(Tokenize("         "), ["         "], "Tokenize test failed.")
+
+    def test_Tokenize_05(self):
+        self.assertListEqual(
+            Tokenize("What's that? I don't know..."),
+            ["What", "'", "s", " ", "that", "?", " ",
+             "I", " ", "don", "'", "t", " ", "know", "..."],
+            "Tokenize test failed.")
+
+    def test_Tokenize_06(self):
+        self.assertListEqual(Tokenize("2kj2h5^fa$s.64f"),
+                             ["2", "kj", "2", "h", "5", "^", "fa", "$", "s", ".", "64", "f"],
+                             "Tokenize test failed.")
+
+    def test_Tokenize_07(self):
+        self.assertListEqual(Tokenize(" "),
+                             [" "],
+                             "Tokenize test failed.")
+
+
+    def test_Probabilities_01(self):
+        self.assertListEqual(
+            GetProbabilities(["First test string", "Second test line"], 1),
+            [{(): {'First': 0.16666666666666666,
+                   'line': 0.16666666666666666,
+                   'string': 0.16666666666666666,
+                   'test': 0.3333333333333333,
+                   'Second': 0.16666666666666666}},
+             {('First',): {'test': 1.0},
+              ('test',): {'line': 0.5, 'string': 0.5},
+              ('Second',): {'test': 1.0}}],
+            "Probabilities test failed.")
+
+    def test_Probabilities_02(self):
+        self.assertListEqual(
+            GetProbabilities(["a a a a a", "b b b b b b"], 1),
+            [{(): {'a': 0.45454545454545453, 'b': 0.5454545454545454}},
+             {('a',): {'a': 1.0}, ('b',): {'b': 1.0}}],
+            "Probabilities test failed.")
+
+    def test_Probabilities_03(self):
+        self.assertListEqual(
+            GetProbabilities(["a b c d e f g"], 4),
+            [{(): {'a': 0.14285714285714285,
+                   'b': 0.14285714285714285,
+                   'c': 0.14285714285714285,
+                   'f': 0.14285714285714285,
+                   'e': 0.14285714285714285,
+                   'd': 0.14285714285714285,
+                   'g': 0.14285714285714285}},
+             {('a',): {'b': 1.0},
+              ('b',): {'c': 1.0},
+              ('c',): {'d': 1.0},
+              ('d',): {'e': 1.0},
+              ('e',): {'f': 1.0},
+              ('f',): {'g': 1.0}},
+             {('a', 'b'): {'c': 1.0},
+              ('b', 'c'): {'d': 1.0},
+              ('c', 'd'): {'e': 1.0},
+              ('d', 'e'): {'f': 1.0},
+              ('e', 'f'): {'g': 1.0}},
+             {('a', 'b', 'c'): {'d': 1.0},
+              ('b', 'c', 'd'): {'e': 1.0},
+              ('c', 'd', 'e'): {'f': 1.0},
+              ('d', 'e', 'f'): {'g': 1.0}},
+             {('a', 'b', 'c', 'd'): {'e': 1.0},
+              ('b', 'c', 'd', 'e'): {'f': 1.0},
+              ('c', 'd', 'e', 'f'): {'g': 1.0}}],
+            "Probabilities test failed.")
+
+    def test_Probabilities_04(self):
+        self.assertListEqual(GetProbabilities(["a b c"], 10),
+                             [{(): {'a': 0.3333333333333333,
+                                    'b': 0.3333333333333333,
+                                    'c': 0.3333333333333333}},
+                              {('a',): {'b': 1.0},
+                               ('b',): {'c': 1.0}},
+                              {('a', 'b'): {'c': 1.0}},
+                              {('a', 'b'): {'c': 1.0}},
+                              {('a', 'b'): {'c': 1.0}},
+                              {('a', 'b'): {'c': 1.0}},
+                              {('a', 'b'): {'c': 1.0}},
+                              {('a', 'b'): {'c': 1.0}},
+                              {('a', 'b'): {'c': 1.0}},
+                              {('a', 'b'): {'c': 1.0}},
+                              {('a', 'b'): {'c': 1.0}}],
+                             "Probabilities test failed.")
+
+    def test_Probabilities_05(self):
+        self.assertListEqual(GetProbabilities(["Hello, world!"], 1),
+                             [{(): {'world': 0.5, 'Hello': 0.5}},
+                              {('Hello',): {'world': 1.0}}],
+                             "Probabilities test failed.")
+
+    def test_Generate_01(self):
+        self.assertLess(
+            len(Generate(["Python - активно развивающийся язык программирования, новые версии "
+                          "(с добавлением/изменением языковых свойств) выходят примерно раз в два"
+                          " с половиной года.",
+                          "Вследствие этого и некоторых других причин на Python отсутствуют "
+                          "стандарт ANSI, ISO или другие официальные стандарты, их роль "
+                          "выполняет CPython."],
+                         1,
+                         10,
+                         seed=321)),
+            30,
+            "Generate test failed.")
+
+    def test_Generate_02(self):
+        self.assertGreater(
+            len(Generate(["Python - активно развивающийся язык программирования, новые версии "
+                          "(с добавлением/изменением языковых свойств) выходят примерно раз в два"
+                          " с половиной года.",
+                          "Вследствие этого и некоторых других причин на Python отсутствуют "
+                          "стандарт ANSI, ISO или другие официальные стандарты, их роль "
+                          "выполняет CPython."],
+                         10,
+                         10,
+                         seed=321)),
+            40,
+            "Generate test failed.")
+
+def UnitTests():
+    '''
+    Unit tests for the program
+
+    :return: None
+    '''
+
+    unittest.main()
+
 def ReadInputText(args):
+    '''
+    read input data depending on args
+
+    :param args: argparse.ArgumentParser() - the arguments of the program.
+
+    :return: list of str - text from the input
+    '''
     input_text = []
     if args.command == 'tokenize':
         input_text.append(input())
-    else:
+    elif (args.command == 'generate' or args.command == 'probabilities'):
         for text in sys.stdin:
             input_text.append(text)
+    elif (args.command == 'test'):
+        None
     return input_text
 
 def Print(text, args):
@@ -223,7 +388,7 @@ def Print(text, args):
     :param text: str - the text to be printed.
     :param args: argparse.ArgumentParser() - the command to be processed and the arguments for it.
 
-    :return: void
+    :return: None
     '''
 
     if (args.command == 'tokenize'):
@@ -253,17 +418,11 @@ if __name__ == '__main__':
     parser.add_argument("-s", "--size", action="store", type=int, default=32,
                         help="Approximate amount of words for generating.")
 
-    args_raw_str = input()
-    args = parser.parse_args(args_raw_str.split())
-    input_text = ReadInputText(args)
-    Print(ToProcessText(input_text, args), args)
-
-def UnitTests(input_text, args):
-    '''
-    Unit tests for the program
-
-    :param input_text:
-    :param args:
-
-    :return:
-    '''
+    input_text = []
+    with open("input.txt", encoding='utf-8') as reader:
+        input_text = reader.read().split("\n")
+    args = parser.parse_args(input_text[0].split())
+    Print(ToProcessText(input_text[1:], args), args)
+    # args = parser.parse_args(input().split())
+    # input_text = ReadInputText(args)
+    # Print(ToProcessText(input_text, args), args)
