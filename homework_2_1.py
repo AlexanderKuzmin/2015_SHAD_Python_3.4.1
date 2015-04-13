@@ -418,11 +418,6 @@ if __name__ == '__main__':
     parser.add_argument("-s", "--size", action="store", type=int, default=32,
                         help="Approximate amount of words for generating.")
 
-    input_text = []
-    with open("input.txt", encoding='utf-8') as reader:
-        input_text = reader.read().split("\n")
-    args = parser.parse_args(input_text[0].split())
-    Print(ToProcessText(input_text[1:], args), args)
-    # args = parser.parse_args(input().split())
-    # input_text = ReadInputText(args)
-    # Print(ToProcessText(input_text, args), args)
+    args = parser.parse_args(input().split())
+    input_text = ReadInputText(args)
+    Print(ToProcessText(input_text, args), args)
