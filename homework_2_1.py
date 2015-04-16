@@ -131,6 +131,8 @@ def GetNGrams(tokens, n, predicate, tokens_counter=defaultdict(Counter)):
             n_gram.append(tokens[index])
         index += 1
 
+    if (len(n_gram) == 0):
+        return tokens_counter
     tokens_counter[tuple(n_gram[:-1])][n_gram[-1]] += 1
 
     while (index < len(tokens)):
@@ -186,6 +188,7 @@ def Generate(input_text, depth, size, seed=None):
                                          depth,
                                          lambda x: not x.isspace() and not x.isdigit(),
                                          n_gram_probabilities)
+
     total_arrays = {key: list(chain(*[[k] * v for k, v in counter.items()]))
                     for key, counter in n_gram_probabilities.items()}
     prefices = [word for word in n_gram_probabilities.keys()
@@ -194,19 +197,36 @@ def Generate(input_text, depth, size, seed=None):
     prefix_tokens = []
     if (prefices != []):
         prefix_tokens = list(random.choice(prefices))
-        generated_text = copy(prefix_tokens)
+        for token in prefix_tokens:
+            if token[0].isalpha():
+                generated_text.append(token)
+            else:
+                generated_text[-1] += token
     current_size = sum([len(word) for word in generated_text])
     while(current_size < size):
         current_array = total_arrays.get(tuple(prefix_tokens))
         if (current_array is not None):
             word = random.choice(current_array)
-            generated_text.append(word)
+            if word[0].isalpha():
+                generated_text.append(word)
+            else:
+                generated_text[-1] += word
             current_size += len(word) + 1
             prefix_tokens.append(word)
             prefix_tokens.pop(0)
         else:
-            prefix_tokens = list(random.choice(list(n_gram_probabilities.keys())))
-            generated_text.extend(prefix_tokens)
+            # is punctuation
+            if (len(prefix_tokens) > 0 and not prefix_tokens[-1][-1].isalpha()):
+                prefix_tokens = []
+                if (prefices != []):
+                    prefix_tokens = list(random.choice(prefices))
+            else:
+                prefix_tokens = list(random.choice(list(n_gram_probabilities.keys())))
+            for token in prefix_tokens:
+                if token[0].isalpha():
+                    generated_text.append(token)
+                else:
+                    generated_text[-1] += token
             current_size += sum([len(word) for word in prefix_tokens]) + 1
     return " ".join(generated_text)
 
@@ -395,7 +415,8 @@ def Print(text, args):
         for word in text:
             print(word)
     elif (args.command == 'generate'):
-        print(text)
+        with open("output.txt", "w", encoding='utf-8') as writer:
+            writer.write(text)
     elif (args.command == 'probabilities'):
         for depth_dict in text:
             sorted_keys = sorted(depth_dict.keys())
@@ -418,6 +439,12 @@ if __name__ == '__main__':
     parser.add_argument("-s", "--size", action="store", type=int, default=32,
                         help="Approximate amount of words for generating.")
 
-    args = parser.parse_args(input().split())
-    input_text = ReadInputText(args)
-    Print(ToProcessText(input_text, args), args)
+    input_text = []
+    with open("input.txt", encoding='utf-8') as reader:
+        input_text = reader.read()
+    input_text = input_text.split("\n")
+    args = parser.parse_args(input_text[0].split())
+    Print(ToProcessText(input_text[1:], args), args)
+    # args = parser.parse_args(input().split())
+    # input_text = ReadInputText(args)
+    # Print(ToProcessText(input_text, args), args)
